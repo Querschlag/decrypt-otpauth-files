@@ -278,6 +278,10 @@ def decrypt_backup(encrypted_otpauth_backup):
     data = AES.new(key, AES.MODE_CBC, iv).decrypt(encrypted_otpauth_backup.read())
     data = data[:-data[-1]]
 
+    # with open('backup.plist', 'wb+') as f:
+    #     f.seek(0)
+    #     f.write(data)
+
     # Decode wrapping archive
     archive = archiver.Unarchive(data).top_object()
 
@@ -290,6 +294,10 @@ def decrypt_backup(encrypted_otpauth_backup):
         return
 
     for account in accounts:
+        # print(account.otp_uri())
+        # print(f'Account Type: {account.type}')
+        # print(f'Account Issuer: {account.issuer}')
+        # print(f'Account Label: {account.label}')
         render_qr_to_terminal(account.otp_uri(), account.type, account.issuer, account.label)
         input("Press Enter to continue...")
 
@@ -318,6 +326,33 @@ def decrypt_backup_11(archive, password):
     archive = DangerousUnarchive(data).top_object()
 
     return [account for folder in archive['Folders'] for account in folder.accounts]
+
+
+@cli.command()
+@click.option('--uri-file',
+              help='path to text file with OTP URIs',
+              required=True,
+              type=click.File('r'))
+def uris_to_qr(uri_file):
+    lines = uri_file.read().strip().split('\n')
+    for line in lines:
+        print(f'Line: {line}')
+
+        import re
+        from urllib.parse import unquote
+
+        account_type = 'Type.TOTP'
+        match = re.search('otpauth://totp\/(?P<Issuer>.*):', line)
+        if not match:
+            match = re.search('otpauth://totp\/(?P<Issuer>.*)?', line)
+        account_issuer = match.group('Issuer') if match else ''
+        match = re.search('otpauth://totp/.*:(?P<Label>.*)?', line)
+        account_label = unquote(match.group('Label')) if match else ''
+
+        print(f'Account Type: {account_type}')
+        print(f'Account Issuer: {account_issuer}')
+        print(f'Account Label: {account_label}')
+        render_qr_to_terminal(line, account_type, account_issuer, account_label)
 
 
 if __name__ == '__main__':
