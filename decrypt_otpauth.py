@@ -1,4 +1,7 @@
 import base64
+from pathlib import Path
+from typing import Optional
+
 import click
 import getpass
 import hashlib
@@ -189,8 +192,12 @@ class DangerousUnarchive(archiver.Unarchive):
         return obj
 
 
+def qr_code(otp_uri) -> pyqrcode.QRCode:
+    return pyqrcode.create(otp_uri, error="L")
+
+
 def render_qr_to_terminal(otp_uri, type, issuer, label):
-    qr = pyqrcode.create(otp_uri, error="L")
+    qr = qr_code(otp_uri)
     click.echo("")
     click.echo(f'{type}: {issuer} - {label}')
     click.echo(qr.terminal(quiet_zone=4))
@@ -266,7 +273,16 @@ def decrypt_account_12(archive, password):
               help="path to your encrypted OTP Auth backup (.otpauthdb)",
               required=True,
               type=click.File('rb'))
-def decrypt_backup(encrypted_otpauth_backup):
+@click.option('--png-output-path',
+              help='path where PNGs for QR-Codes should be generated',
+              required=False,
+              type=Path)
+def decrypt_backup(encrypted_otpauth_backup, png_output_path: Optional[Path]):
+    if png_output_path:
+        if not png_output_path.exists() or not png_output_path.is_dir():
+            click.echo(f'Output path for PNG does not exist: {png_output_path}', err=True)
+            exit(1)
+
     # Get password from user
     password = getpass.getpass(f'Password for export file {encrypted_otpauth_backup.name}: ')
 
@@ -298,8 +314,13 @@ def decrypt_backup(encrypted_otpauth_backup):
         # print(f'Account Type: {account.type}')
         # print(f'Account Issuer: {account.issuer}')
         # print(f'Account Label: {account.label}')
-        render_qr_to_terminal(account.otp_uri(), account.type, account.issuer, account.label)
-        input("Press Enter to continue...")
+        if png_output_path:
+            qr = qr_code(account.otp_uri())
+            file_name = f'{account.issuer}_{account.label}'.replace(" ", "-")
+            qr.png(png_output_path.joinpath(f'{file_name}.png'), scale=12)
+        else:
+            render_qr_to_terminal(account.otp_uri(), account.type, account.issuer, account.label)
+            input("Press Enter to continue...")
 
 
 def decrypt_backup_10(archive, password):
